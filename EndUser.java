@@ -6,162 +6,63 @@ import java.net.InetSocketAddress;
 import java.util.*;
 
 public class EndUser extends Node implements Runnable {
-    static final int DEFAULT_SRC_PORT = (int) ((Math.random() * ((65535 - 1024) + 1) + 1024));
-    static final int DEFAULT_DST_PORT = 50001;
     static final String DEFAULT_DST_NODE = "localhost";
 
-    static final int TYPE_OF_PACKET_POS = 0;
-    static final int TOPIC_LENGTH_POS = 1;
-    static final int PUBLISHER_NUMBER_POS = 4;
-    static final int PRIORITY_POS = 5;
-    static final int NUM_OF_PUBLISHERS_TO_REQUEST_PUBLICATIONS_FROM_POS = 6;
-    static final int DATA_BEGIN_POS = 10;
+    static final int SIZE = 20;
 
-    static final int SEE_IF_PREVIOUS_PUBLICATIONS_ARE_WANTED = 6;
-    static final int SENDING_MULTIPLE_PACKETS = 5;
-    static final int FINISHED_SENDING_ALL_PACKETS = 4;
-    static final int UN_SUB = 2;
-    static final int SUB = 0;
+    InetSocketAddress routerAddress;
+    int destPort;
 
-    List<String> topics = new ArrayList<>();
-    HashMap<Integer, List<DatagramPacket>> packetsReceived = new HashMap<>();
-    InetSocketAddress dstAddress;
-    boolean ended = false;
-
-    EndUser(String dstHost, int dstPort, int srcPort, String topic) {
+    EndUser(int routerPort, int srcPort, int destPort) {
         try {
-            dstAddress = new InetSocketAddress(dstHost, dstPort);
+            routerAddress = new InetSocketAddress(DEFAULT_DST_NODE, routerPort);
             socket = new DatagramSocket(srcPort);
+            this.destPort = destPort;
             listener.go();
             inputListener.start();
-            topics.add(topic);
         } catch (java.lang.Exception e) {
             e.printStackTrace();
         }
     }
 
     public synchronized void onReceipt(DatagramPacket packet) {
-        byte[] data;
-        data = packet.getData();
-        if (data[TYPE_OF_PACKET_POS] == SEE_IF_PREVIOUS_PUBLICATIONS_ARE_WANTED){
-            byte[] question = new byte[data.length - DATA_BEGIN_POS];
-            for (int i = 0 ; i < data.length - DATA_BEGIN_POS; i++){
-                question[i] = data[i + DATA_BEGIN_POS];
-            }
-            System.out.println(new String(question));
-            System.out.println("Press 4");
-        }
-        if (data[TYPE_OF_PACKET_POS] == SENDING_MULTIPLE_PACKETS && !packetsReceived.containsKey(Integer.valueOf(data[PUBLISHER_NUMBER_POS]))){
-            List<DatagramPacket> list = new ArrayList<>();
-            list.add(packet);
-            packetsReceived.put(Integer.valueOf(data[PUBLISHER_NUMBER_POS]), list);
-        }
-        else if (data[TYPE_OF_PACKET_POS] == SENDING_MULTIPLE_PACKETS && packetsReceived.containsKey(Integer.valueOf(data[PUBLISHER_NUMBER_POS]))){
-            List<DatagramPacket> list = packetsReceived.get(Integer.valueOf(data[PUBLISHER_NUMBER_POS]));
-            list.add(packet);
-            packetsReceived.put((Integer.valueOf(data[PUBLISHER_NUMBER_POS])), list);
-        }
-        if (packet.getData()[TYPE_OF_PACKET_POS]==FINISHED_SENDING_ALL_PACKETS){
-            int amountOfPacketsReceived = 0;
-            for (int count = 0; count < packetsReceived.size(); count++){
-                amountOfPacketsReceived = amountOfPacketsReceived + packetsReceived.get(count).size();
-            }
-            DatagramPacket[] packets = new DatagramPacket[amountOfPacketsReceived];
-            int lastSize = 0;
-            for (int i = 0; i < packetsReceived.size(); i++){
-                List<DatagramPacket> list = packetsReceived.get(i);
-                for (int j = 0; j < list.size(); j++){
-                    packets[list.get(j).getData()[PRIORITY_POS] + lastSize] = list.get(j);
-                }
-                lastSize = list.size() + lastSize;
-            }
-            for (int k = 0 ; k < packets.length; k++){
-                byte[] message = new byte[packets[k].getData().length - DATA_BEGIN_POS];
-                for (int j = 0 ; j < message.length; j++){
-                    message[j] = packets[k].getData()[DATA_BEGIN_POS + j];
-                }
-                String content = new String(message);
-                System.out.println(content);
-            }
-            packetsReceived = null;
-        }
-        else if (data[TYPE_OF_PACKET_POS] == SUB){
-            byte[] contentToBePrinted = new byte[data.length - DATA_BEGIN_POS];
-            for (int i = 0; i < contentToBePrinted.length; i++){
-                contentToBePrinted[i] = data[i + DATA_BEGIN_POS];
-            }
-            String content = new String(contentToBePrinted);
-            System.out.println(content);
-        }
+        byte[] data = packet.getData();
+        System.out.println(data.toString());
     }
 
     @Override
     public void userInput(String message) {
-        if (!ended) {
-            if (message.equals("1")) {
-                System.out.println("Which topic would you like to unsubscribe from?");
-                Scanner input = new Scanner(System.in);
-                if (input.hasNext()) {
-                    message = input.next();
-                    unSub(message);
-                }
-            } else if (message.equals("2")) {
-                System.out.println("What topic would you also like to subscribe to?");
-                Scanner input = new Scanner(System.in);
-                if (input.hasNext()) {
-                    String topic = input.next();
-                    subToNewTopic(topic.getBytes());
-                }
-            } else if (message.equals("3")) {
-                if (topics.size() == 0) {
-                    System.out.println("You are not currently subscribed to any topics");
-                } else {
-                    for (int i = 0; i < topics.size(); i++) {
-                        System.out.println(topics.get(i));
-                    }
-                }
-            }
-            else if (message.equals("4")){
-                System.out.println("How many of the previous publishers would you like to receive publications from?");
-                Scanner input = new Scanner(System.in);
-                if (input.hasNextInt()){
-                    int num = input.nextInt();
-                    byte[] responseToQuestion = new byte[DATA_BEGIN_POS];
-                    responseToQuestion[NUM_OF_PUBLISHERS_TO_REQUEST_PUBLICATIONS_FROM_POS] = (byte) num;
-                    responseToQuestion[TYPE_OF_PACKET_POS] = SEE_IF_PREVIOUS_PUBLICATIONS_ARE_WANTED;
-                    DatagramPacket response = new DatagramPacket(responseToQuestion, responseToQuestion.length, dstAddress);
-                    try {
-                        socket.send(response);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
+        if (message.equals(0)){
+            System.out.println("What message would you like to send?");
+            Scanner input = new Scanner(System.in);
+            if (input.hasNext()){
+                String text = input.next();
+                byte[] msg = new byte[SIZE + text.length()];
+
+
+                DatagramPacket output = new DatagramPacket(msg, msg.length, routerAddress);
             }
         }
     }
 
-    public synchronized void unSub(String topic) {
-        topics.remove(topic);
-        byte[] topicBytes = topic.getBytes();
-        try {
-            byte[] unSub = new byte[1 + topicBytes.length + 10];
-            unSub[TOPIC_LENGTH_POS] = (byte) topicBytes.length;
-            unSub[TYPE_OF_PACKET_POS] = UN_SUB;
-            for (int i = 0; i < topicBytes.length; i++) {
-                unSub[DATA_BEGIN_POS + i + 1] = topicBytes[i];
-            }
-            DatagramPacket packet = new DatagramPacket(unSub, unSub.length, dstAddress);
-            socket.send(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
+    public static byte[] setInfo(byte[] returnPacket, int startNumber, String info){
+        byte[] msg = info.getBytes();
+        int counter = 0;
+        for (int i = startNumber; i < startNumber + SIZE; i++){
+            returnPacket[counter] = msg[i];
+            counter++;
         }
-        System.out.println("you have unsubscribed from " + topic + " if you would like to end all subscriptions " +
-                " type end else press 0");
-        Scanner scanner = new Scanner(System.in);
-        if (scanner.hasNext("end")) {
-            ended = true;
-            this.notify();
+        return returnPacket;
+    }
+
+    public static String getInfo(byte[] packetData, int startNumber){
+        byte[] tmp = new byte[SIZE];
+        int counter = 0;
+        for(int i = startNumber; i < startNumber + SIZE; i++){
+            tmp[counter] = packetData[i];
+            counter++;
         }
+        return new String(tmp);
     }
 
     public void subToNewTopic(byte[] topicBytes) {

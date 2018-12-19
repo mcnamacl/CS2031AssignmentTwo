@@ -39,9 +39,9 @@ public class Controller extends Node implements Runnable {
         HashMap<String, String[]> routerMap = new HashMap<>();
 
         //come back and add extra user
-        table = configure(table, "50001", "50002", "00100", "00000", routerMap, userMap, "00001");
-        table = configure(table, "50002", "50003", "00101", "00000", routerMap, userMap, "00001");
-        table = configure(table, "50003", "50004", "00110", "00000", routerMap, userMap, "00001");
+        table = configure(table, "50001", "50002", "00100", "49998", routerMap, userMap, "49999");
+        table = configure(table, "50002", "50003", "00101", "49998", routerMap, userMap, "49999");
+        table = configure(table, "50003", "50004", "00110", "49998", routerMap, userMap, "49999");
         return table;
     }
 
